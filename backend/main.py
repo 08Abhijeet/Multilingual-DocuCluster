@@ -5,13 +5,13 @@ import matplotlib.pyplot as plt
 from flask import Flask, request, jsonify, send_from_directory, send_file
 import os
 import re
-import shutil
 from indicnlp.tokenize.sentence_tokenize import sentence_split
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 from langdetect import detect
 from flask_cors import CORS  # To handle CORS for frontend-backend communication
+from libretranslatepy import LibreTranslateAPI  # Import LibreTranslate API
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
@@ -23,9 +23,11 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 GRAPH_FOLDER = "static/graphs"
 os.makedirs(GRAPH_FOLDER, exist_ok=True)
 
+translator = LibreTranslateAPI("http://localhost:3000")
+
 # Paths to stopwords files
-marathi_stopwords_file_path = 'C:/Users/abhij/OneDrive/Desktop/stopwords_marathi.txt'
-english_stopwords_file_path = 'C:/Users/abhij/OneDrive/Desktop/stopwords_english.txt'
+marathi_stopwords_file_path = 'stopwords_marathi.txt'
+english_stopwords_file_path = 'stopwords_english.txt'
 
 # Load stopwords for Marathi and English
 def load_stopwords(file_path):
@@ -43,8 +45,22 @@ def detect_language(text):
     except:
         return 'unknown'
 
+# Function to translate Marathi text to English
+def translate_marathi_to_english(text):
+    try:
+        translated_text = translator.translate(text, source="mr", target="en")
+        return translated_text
+    except Exception as e:
+        print(f"Translation failed: {e}")
+        return text  # Return original text if translation fails
+
 # Preprocess text based on language
 def preprocess_text(text, lang):
+    if lang == 'mr':
+        # Translate Marathi text to English
+        text = translate_marathi_to_english(text)
+        lang = 'en'  # Set language to English after translation
+
     if lang == 'mr':
         sentences = sentence_split(text, lang='mr')
         stop_words = marathi_stopwords
@@ -123,6 +139,25 @@ def get_dynamic_topic(cluster_texts):
     # Extract the top most relevant words as the topic
     top_n_words = [feature_names[i] for i in top_n_indices]
     return ' '.join(top_n_words[:2])  # Use the top 2 words as the cluster topic
+
+# Endpoint to translate a file
+@app.route("/translate", methods=["POST"])
+def translate_file():
+    data = request.json
+    file_name = data.get("file_name")
+    file_path = os.path.join(UPLOAD_FOLDER, file_name)
+
+    if not os.path.exists(file_path):
+        return jsonify({"error": "File not found"}), 404
+
+    with open(file_path, 'r', encoding='utf-8') as file:
+        content = file.read()
+
+    try:
+        translated = translator.translate(content, source="hi", target="en")
+        return jsonify({"translated_text": translated})
+    except Exception as e:
+        return jsonify({"error": f"Translation failed: {e}"}), 500
 
 # Endpoint to upload files
 @app.route("/upload", methods=["POST"])

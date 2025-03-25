@@ -2,6 +2,7 @@ import React, { useState, useRef } from "react";
 import axios from "axios";
 import { IoDocumentTextOutline } from "react-icons/io5";
 import { MdArrowBack } from "react-icons/md";
+
 export default function UploadPage() {
   const [files, setFiles] = useState([]);
   const [fileThumbnails, setFileThumbnails] = useState([]);
@@ -12,6 +13,8 @@ export default function UploadPage() {
   const [silhouetteGraph, setSilhouetteGraph] = useState("");
   const [modalFile, setModalFile] = useState(null); // State for managing modal content
   const [showResults, setShowResults] = useState(true); // State to toggle between modal and results page
+  const [translatedContent, setTranslatedContent] = useState(null); // State for translated content
+  const [isTranslating, setIsTranslating] = useState(false); // State to manage translation loading
   const fileInputRef = useRef(null);
 
   const handleFileChange = (e) => {
@@ -19,11 +22,11 @@ export default function UploadPage() {
     setFiles(selectedFiles);
     setError(null);
 
-    const thumbnails = selectedFiles.map(file => {
+    const thumbnails = selectedFiles.map((file) => {
       if (file.type.startsWith("image/")) {
-        return URL.createObjectURL(file); 
+        return URL.createObjectURL(file);
       } else {
-        return null; 
+        return null;
       }
     });
     setFileThumbnails(thumbnails);
@@ -74,11 +77,41 @@ export default function UploadPage() {
     const fileUrl = `http://127.0.0.1:5000/files/${fileName}`; // Correct file URL
     setModalFile(fileUrl); // Set the file URL to modal
     setShowResults(false); // Hide results page when modal is open
+    setTranslatedContent(null); // Reset translated content when opening a new file
   };
 
   const closeModal = () => {
     setModalFile(null); // Close the modal
     setShowResults(true); // Show the results page again
+    setTranslatedContent(null); // Reset translated content
+  };
+
+  // Function to translate content
+  const translateContent = async () => {
+    if (!modalFile) return;
+
+    setIsTranslating(true);
+    try {
+      // Fetch the file content
+      const response = await axios.get(modalFile);
+      const content = response.data;
+
+      // Send the content to LibreTranslate API for translation
+      const translateRes = await axios.post("http://localhost:3000/translate", {
+        q: content,
+        source: "hi", // Assuming the source language is Hindi
+        target: "en", // Target language is English
+        format: "text",
+      });
+
+      // Set the translated content
+      setTranslatedContent(translateRes.data.translatedText);
+    } catch (err) {
+      console.error("Translation failed:", err);
+      setError("Translation failed. Please try again.");
+    } finally {
+      setIsTranslating(false);
+    }
   };
 
   return (
@@ -95,7 +128,7 @@ export default function UploadPage() {
             "Click to select files"
           ) : (
             <div className="flex flex-wrap gap-2">
-              {fileThumbnails.map((thumb, index) => (
+              {fileThumbnails.map((thumb, index) =>
                 thumb ? (
                   <img key={index} src={thumb} alt={`thumb-${index}`} className="w-16 h-16 object-cover rounded-md" />
                 ) : (
@@ -103,7 +136,7 @@ export default function UploadPage() {
                     {files[index].name}
                   </div>
                 )
-              ))}
+              )}
             </div>
           )}
         </label>
@@ -144,7 +177,7 @@ export default function UploadPage() {
                       <li key={fileIndex} className="text-gray-600 flex items-center">
                         <IoDocumentTextOutline className="mr-2 text-gray-500" />
                         <button
-                          onClick={() => openFile(file)} 
+                          onClick={() => openFile(file)}
                           className="text-gray-700 hover:text-gray-900 cursor-pointer hover:underline"
                         >
                           {file}
@@ -190,7 +223,6 @@ export default function UploadPage() {
       {modalFile && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-8 rounded-lg w-3/4 max-w-3xl">
-          <MdArrowBack />
             <button
               onClick={closeModal}
               className="absolute top-4 left-4 border-2 p-2 w-20 bg-blue-500 rounded-lg font-bold text-white-500 hover:text-white cursor-pointer"
@@ -198,7 +230,22 @@ export default function UploadPage() {
               <MdArrowBack />
               Back
             </button>
+            <button
+              onClick={translateContent}
+              className="absolute top-4 right-4 border-2 p-2 w-28 bg-green-500 rounded-lg font-bold text-white-500 hover:text-white cursor-pointer"
+              disabled={isTranslating}
+            >
+              {isTranslating ? "Translating..." : "Translate"}
+            </button>
             <iframe src={modalFile} className="w-full h-96 border-0" title="File Content"></iframe>
+            {translatedContent && (
+              <div className="mt-4 p-4 bg-gray-100 rounded-md">
+                <h3 className="text-lg font-semibold">Translated Content</h3>
+                <div className="mt-2 h-48 overflow-y-auto text-gray-700"> {/* Scrollable container */}
+                  {translatedContent}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
